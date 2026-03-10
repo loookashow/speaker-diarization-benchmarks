@@ -1,0 +1,31 @@
+services:
+  benchmark-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_BUILTINS: "0"
+    image: diarization-benchmarks:local
+    container_name: diarization-benchmarks
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      BENCH_DATASETS_ROOT: /data/datasets
+      BENCH_DATASETS_FILE: /app/config/datasets.docker.json
+      BENCH_WORK_DIR: /app/data/work
+      BENCH_REPORTS_DIR: /app/data/reports
+      BENCH_VENV_ROOT: /app/data/venvs
+    volumes:
+      - ./data/work:/app/data/work
+      - ./data/reports:/app/data/reports
+      - ./data/venvs:/app/data/venvs
+      - ./data/datasets:/data/datasets:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

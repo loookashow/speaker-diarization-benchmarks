@@ -1,0 +1,11 @@
+{
+  "datasets": [
+    {
+      "dataset_id": "voxconverse",
+      "root": "voxconverse",
+      "audio_dir": "audio",
+      "reference_rttm_dir": "rttm",
+      "audio_glob": "**/*.wav"
+    }
+  ]
+}

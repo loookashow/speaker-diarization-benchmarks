@@ -1,0 +1,250 @@
+name: Prepare Fly Datasets
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: "Fly app name"
+        required: false
+        default: "diarization-benchmarks"
+        type: string
+      download_voxconverse:
+        description: "Prepare VoxConverse"
+        required: false
+        default: false
+        type: boolean
+      voxconverse_archive_url:
+        description: "Optional VoxConverse archive URL (.zip/.tar/.tar.gz)"
+        required: false
+        default: ""
+        type: string
+      download_aishell4_test:
+        description: "Download and prepare AISHELL-4 test split"
+        required: false
+        default: true
+        type: boolean
+      download_alimeeting_ch1:
+        description: "Download and prepare AliMeeting Eval (far/ch1)"
+        required: false
+        default: true
+        type: boolean
+      force_redownload:
+        description: "Re-download archives even if already present on volume"
+        required: false
+        default: false
+        type: boolean
+      stop_machine_when_done:
+        description: "Stop target machine after preparation"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Resolve machine
+        id: machine
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+          set -euo pipefail
+          machines_json="$(flyctl machine list -a "$APP_NAME" --json)"
+          machine_id="$(echo "$machines_json" | jq -r '[.[] | select(.state=="started")][0].id // .[0].id // empty')"
+          if [ -z "$machine_id" ]; then
+            echo "No machines found for app '$APP_NAME'. Deploy app first."
+            exit 1
+          fi
+          echo "machine_id=$machine_id" >> "$GITHUB_OUTPUT"
+
+      - name: Start machine (if needed)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          MACHINE_ID: ${{ steps.machine.outputs.machine_id }}
+        run: |
+          set -euo pipefail
+          state="$(flyctl machine status "$MACHINE_ID" -a "$APP_NAME" --json | jq -r '.state // empty')"
+          if [ "$state" != "started" ]; then
+            flyctl machine start "$MACHINE_ID" -a "$APP_NAME"
+          fi
+          for _ in $(seq 1 30); do
+            state="$(flyctl machine status "$MACHINE_ID" -a "$APP_NAME" --json | jq -r '.state // empty')"
+            if [ "$state" = "started" ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ "$state" != "started" ]; then
+            echo "Machine '$MACHINE_ID' is not started (state=$state)."
+            exit 1
+          fi
+
+      - name: Create base directories on volume
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          MACHINE_ID: ${{ steps.machine.outputs.machine_id }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console -a "$APP_NAME" --select "$MACHINE_ID" \
+            -C "bash -lc 'set -euo pipefail; mkdir -p /data/datasets /data/downloads'"
+
+      - name: Prepare AISHELL-4 test split
+        if: ${{ inputs.download_aishell4_test }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          MACHINE_ID: ${{ steps.machine.outputs.machine_id }}
+          FORCE_REDOWNLOAD: ${{ inputs.force_redownload }}
+        run: |
+          set -euo pipefail
+          force=0
+          if [ "${FORCE_REDOWNLOAD}" = "true" ]; then
+            force=1
+          fi
+          flyctl ssh console -a "$APP_NAME" --select "$MACHINE_ID" -C "bash -lc '
+            set -euo pipefail
+            mkdir -p /data/downloads /data/datasets/aishell4
+            if [ $force -eq 1 ] || [ ! -f /data/downloads/aishell4_test.tar.gz ]; then
+              rm -f /data/downloads/aishell4_test.tar.gz
+              for attempt in 1 2 3; do
+                python -c \"import urllib.request; urllib.request.urlretrieve(\\\"https://openslr.trmal.net/resources/111/test.tar.gz\\\", \\\"/data/downloads/aishell4_test.tar.gz\\\")\" && break
+                if [ \"\$attempt\" -eq 3 ]; then
+                  echo \"Failed to download AISHELL-4 archive after 3 attempts.\"
+                  exit 1
+                fi
+                sleep 2
+              done
+            fi
+            if [ $force -eq 1 ] || [ ! -d /data/downloads/aishell4_test/test/wav ]; then
+              rm -rf /data/downloads/aishell4_test
+              mkdir -p /data/downloads/aishell4_test
+              tar -xzf /data/downloads/aishell4_test.tar.gz -C /data/downloads/aishell4_test
+            fi
+            ln -sfn /data/downloads/aishell4_test/test/wav /data/datasets/aishell4/audio
+            ln -sfn /data/downloads/aishell4_test/test/TextGrid /data/datasets/aishell4/rttm
+          '"
+
+      - name: Prepare VoxConverse
+        if: ${{ inputs.download_voxconverse }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          MACHINE_ID: ${{ steps.machine.outputs.machine_id }}
+          FORCE_REDOWNLOAD: ${{ inputs.force_redownload }}
+          VOXCONVERSE_ARCHIVE_URL: ${{ inputs.voxconverse_archive_url }}
+        run: |
+          set -euo pipefail
+          force=0
+          if [ "${FORCE_REDOWNLOAD}" = "true" ]; then
+            force=1
+          fi
+          flyctl ssh console -a "$APP_NAME" --select "$MACHINE_ID" -C "bash -lc '
+            set -euo pipefail
+            mkdir -p /data/downloads /data/datasets/voxconverse
+            if [ -n \"${VOXCONVERSE_ARCHIVE_URL}\" ]; then
+              if [ $force -eq 1 ] || [ ! -f /data/downloads/voxconverse_dataset.archive ]; then
+                rm -f /data/downloads/voxconverse_dataset.archive
+                for attempt in 1 2 3; do
+                  python -c \"import urllib.request; urllib.request.urlretrieve(\\\"${VOXCONVERSE_ARCHIVE_URL}\\\", \\\"/data/downloads/voxconverse_dataset.archive\\\")\" && break
+                  if [ \"\$attempt\" -eq 3 ]; then
+                    echo \"Failed to download VoxConverse archive after 3 attempts.\"
+                    exit 1
+                  fi
+                  sleep 2
+                done
+              fi
+              python /app/scripts/open_track_prepare_voxconverse.py \
+                --archive /data/downloads/voxconverse_dataset.archive \
+                --extract-root /data/downloads/voxconverse_raw \
+                --dataset-root /data/datasets/voxconverse \
+                --clean
+            elif [ ! -e /data/datasets/voxconverse/audio ] || [ ! -e /data/datasets/voxconverse/rttm ]; then
+              if [ -d /data/downloads/voxconverse_raw ]; then
+                python /app/scripts/open_track_prepare_voxconverse.py \
+                  --extract-root /data/downloads/voxconverse_raw \
+                  --dataset-root /data/datasets/voxconverse \
+                  --clean
+              fi
+            fi
+
+            if [ ! -e /data/datasets/voxconverse/audio ] || [ ! -e /data/datasets/voxconverse/rttm ]; then
+              echo \"VoxConverse is selected but not prepared.\"
+              echo \"Either provide voxconverse_archive_url input or pre-populate /data/datasets/voxconverse/{audio,rttm}.\"
+              exit 1
+            fi
+          '"
+
+      - name: Prepare AliMeeting Eval (far/ch1)
+        if: ${{ inputs.download_alimeeting_ch1 }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          MACHINE_ID: ${{ steps.machine.outputs.machine_id }}
+          FORCE_REDOWNLOAD: ${{ inputs.force_redownload }}
+        run: |
+          set -euo pipefail
+          force=0
+          if [ "${FORCE_REDOWNLOAD}" = "true" ]; then
+            force=1
+          fi
+          flyctl ssh console -a "$APP_NAME" --select "$MACHINE_ID" -C "bash -lc '
+            set -euo pipefail
+            mkdir -p /data/downloads /data/datasets/alimeeting_ch1
+            if [ $force -eq 1 ] || [ ! -f /data/downloads/alimeeting_eval.tar.gz ]; then
+              rm -f /data/downloads/alimeeting_eval.tar.gz
+              for attempt in 1 2 3; do
+                python -c \"import urllib.request; urllib.request.urlretrieve(\\\"https://speech-lab-share-data.oss-cn-shanghai.aliyuncs.com/AliMeeting/openlr/Eval_Ali.tar.gz\\\", \\\"/data/downloads/alimeeting_eval.tar.gz\\\")\" && break
+                if [ \"\$attempt\" -eq 3 ]; then
+                  echo \"Failed to download AliMeeting archive after 3 attempts.\"
+                  exit 1
+                fi
+                sleep 2
+              done
+            fi
+            if [ $force -eq 1 ] || [ ! -d /data/downloads/alimeeting_eval/Eval_Ali/Eval_Ali_far ]; then
+              rm -rf /data/downloads/alimeeting_eval
+              mkdir -p /data/downloads/alimeeting_eval
+              tar -xzf /data/downloads/alimeeting_eval.tar.gz -C /data/downloads/alimeeting_eval
+            fi
+            python /app/scripts/open_track_prepare_alimeeting_eval.py \
+              --source-root /data/downloads/alimeeting_eval/Eval_Ali/Eval_Ali_far \
+              --dataset-root /data/datasets/alimeeting_ch1 \
+              --clean
+          '"
+
+      - name: Validate dataset readiness on Fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          MACHINE_ID: ${{ steps.machine.outputs.machine_id }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console -a "$APP_NAME" --select "$MACHINE_ID" -C "bash -lc '
+            set -euo pipefail
+            python /app/scripts/open_track_check.py \
+              --datasets-file /app/config/datasets.docker.json \
+              --datasets-root /data/datasets
+          '"
+          flyctl ssh console -a "$APP_NAME" --select "$MACHINE_ID" -C "bash -lc 'df -h /data'"
+
+      - name: Stop machine
+        if: ${{ always() && inputs.stop_machine_when_done }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP_NAME: ${{ inputs.app_name }}
+          MACHINE_ID: ${{ steps.machine.outputs.machine_id }}
+        run: |
+          set -euo pipefail
+          flyctl machine stop "$MACHINE_ID" -a "$APP_NAME" || true

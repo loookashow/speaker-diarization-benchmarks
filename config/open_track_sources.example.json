@@ -1,0 +1,29 @@
+{
+  "sources": [
+    {
+      "dataset_id": "ami_ihm",
+      "audio_src": "/absolute/path/to/ami_ihm/audio",
+      "rttm_src": "/absolute/path/to/ami_ihm/rttm"
+    },
+    {
+      "dataset_id": "ami_sdm",
+      "audio_src": "/absolute/path/to/ami_sdm/audio",
+      "rttm_src": "/absolute/path/to/ami_sdm/rttm"
+    },
+    {
+      "dataset_id": "aishell4",
+      "audio_src": "/absolute/path/to/aishell4/audio",
+      "rttm_src": "/absolute/path/to/aishell4/rttm"
+    },
+    {
+      "dataset_id": "alimeeting_ch1",
+      "audio_src": "/absolute/path/to/alimeeting_ch1/audio",
+      "rttm_src": "/absolute/path/to/alimeeting_ch1/rttm"
+    },
+    {
+      "dataset_id": "msdwild",
+      "audio_src": "/absolute/path/to/msdwild/audio",
+      "rttm_src": "/absolute/path/to/msdwild/rttm"
+    }
+  ]
+}

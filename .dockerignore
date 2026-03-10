@@ -1,0 +1,38 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual envs
+.venv/
+venv/
+
+# Tooling/cache
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Local runtime artifacts
+data/work/
+data/reports/
+data/venvs/
+
+# Local datasets should be mounted as volumes
+data/datasets/
+data/downloads/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# VCS/IDE
+.git/
+.idea/
+.DS_Store

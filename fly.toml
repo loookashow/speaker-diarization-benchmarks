@@ -1,0 +1,43 @@
+app = "diarization-benchmarks"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = "2m"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  BENCH_DATASETS_ROOT = "/data/datasets"
+  BENCH_DATASETS_FILE = "/app/config/datasets.docker.json"
+  BENCH_WORK_DIR = "/app/data/work"
+  BENCH_REPORTS_DIR = "/app/data/reports"
+  BENCH_VENV_ROOT = "/app/data/venvs"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "stop"
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 40
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "60s"
+    method = "GET"
+    path = "/health"
+
+[[mounts]]
+  source = "bench_data"
+  destination = "/data"
+
+[[vm]]
+  cpu_kind = "performance"
+  cpus = 4
+  memory_mb = 4096

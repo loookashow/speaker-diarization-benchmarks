@@ -1,0 +1,38 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+data/venvs/
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Runtime artifacts
+data/work/
+data/reports/
+
+# Local datasets
+data/datasets/
+data/downloads/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

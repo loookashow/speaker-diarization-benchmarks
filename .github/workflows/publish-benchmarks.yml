@@ -1,0 +1,95 @@
+name: Publish Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_ids:
+        description: "Comma-separated benchmark job IDs"
+        required: true
+        type: string
+      base_url:
+        description: "Benchmark API base URL (example: https://bench.example.com)"
+        required: true
+        type: string
+      output_dir:
+        description: "Output directory in repo"
+        required: false
+        default: "benchmarks"
+        type: string
+      allow_failed:
+        description: "Include failed jobs too"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Publish Benchmark Artifacts
+        env:
+          BENCH_API_KEY: ${{ secrets.BENCH_API_KEY }}
+          INPUT_JOB_IDS: ${{ inputs.job_ids }}
+          INPUT_BASE_URL: ${{ inputs.base_url }}
+          INPUT_OUTPUT_DIR: ${{ inputs.output_dir }}
+          INPUT_ALLOW_FAILED: ${{ inputs.allow_failed }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BENCH_API_KEY}" ]; then
+            echo "Missing required secret: BENCH_API_KEY"
+            exit 1
+          fi
+
+          job_flags=()
+          IFS=',' read -r -a ids <<< "${INPUT_JOB_IDS}"
+          for raw in "${ids[@]}"; do
+            job_id="$(echo "${raw}" | xargs)"
+            if [ -n "${job_id}" ]; then
+              job_flags+=(--job-id "${job_id}")
+            fi
+          done
+
+          if [ "${#job_flags[@]}" -eq 0 ]; then
+            echo "No valid job IDs provided."
+            exit 1
+          fi
+
+          allow_failed_flag=()
+          if [ "${INPUT_ALLOW_FAILED}" = "true" ]; then
+            allow_failed_flag+=(--allow-failed)
+          fi
+
+          python scripts/publish_benchmarks.py \
+            --base-url "${INPUT_BASE_URL}" \
+            --api-key "${BENCH_API_KEY}" \
+            --output-dir "${INPUT_OUTPUT_DIR}" \
+            "${allow_failed_flag[@]}" \
+            "${job_flags[@]}"
+
+      - name: Commit And Push
+        env:
+          INPUT_JOB_IDS: ${{ inputs.job_ids }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "No benchmark artifact changes."
+            exit 0
+          fi
+
+          git add benchmarks
+          git commit -m "benchmarks: publish ${INPUT_JOB_IDS}"
+          git push

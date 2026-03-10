@@ -1,4 +1,4 @@
-# diarization-benchmarks
+# speaker-diarization-benchmarks
 
 CPU diarization benchmark service focused on reproducible, hardware-explicit comparisons.
 

@@ -99,7 +99,7 @@ By default, Docker mounts:
 {
   "dataset_id": "voxconverse",
   "n_runs": 3,
-  "cpu_threads": 4,
+  "cpu_threads": 2,
   "warmup_files": 1,
   "systems": [
     {
@@ -117,7 +117,7 @@ By default, Docker mounts:
 Notes:
 
 - `n_runs`: optional, default `1`, max `20`
-- `cpu_threads`: optional, defaults to all logical CPUs
+- `cpu_threads`: optional, defaults to `BENCH_DEFAULT_CPU_THREADS` when set, otherwise all logical CPUs
 
 ## Reports
 
@@ -239,6 +239,9 @@ BENCH_API_KEY="..." ./scripts/open_track_smoke_api.py \
 - auto-stop when idle
 - `min_machines_running = 0`
 - dedicated performance CPU
+- `cpus = 2`
+- `memory_mb = 4096`
+- `BENCH_DEFAULT_CPU_THREADS = 2` to match the Fly VM profile by default
 - persistent volume mounted at `/data` for datasets
 
 Typical deploy flow:

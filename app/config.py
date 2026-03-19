@@ -11,10 +11,21 @@ def _split_csv(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _optional_positive_int_from_env(name: str) -> int | None:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return None
+    value = int(raw)
+    if value < 1:
+        raise ValueError(f"{name} must be >= 1")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     api_keys: tuple[str, ...]
     api_key_header: str
+    default_cpu_threads: int | None
     reports_dir: Path
     work_dir: Path
     venv_root: Path
@@ -40,6 +51,7 @@ def get_settings() -> Settings:
     settings = Settings(
         api_keys=tuple(_split_csv(raw_keys)),
         api_key_header=os.getenv("BENCH_API_KEY_HEADER", "X-API-Key"),
+        default_cpu_threads=_optional_positive_int_from_env("BENCH_DEFAULT_CPU_THREADS"),
         reports_dir=Path(os.getenv("BENCH_REPORTS_DIR", "./data/reports")).expanduser(),
         work_dir=Path(os.getenv("BENCH_WORK_DIR", "./data/work")).expanduser(),
         venv_root=Path(os.getenv("BENCH_VENV_ROOT", "./data/venvs")).expanduser(),

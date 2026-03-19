@@ -9,6 +9,7 @@ kill_timeout = "2m"
 [env]
   BENCH_DATASETS_ROOT = "/data/datasets"
   BENCH_DATASETS_FILE = "/app/config/datasets.docker.json"
+  BENCH_DEFAULT_CPU_THREADS = "2"
   BENCH_WORK_DIR = "/app/data/work"
   BENCH_REPORTS_DIR = "/app/data/reports"
   BENCH_VENV_ROOT = "/app/data/venvs"
@@ -39,5 +40,5 @@ kill_timeout = "2m"
 
 [[vm]]
   cpu_kind = "performance"
-  cpus = 4
+  cpus = 2
   memory_mb = 4096

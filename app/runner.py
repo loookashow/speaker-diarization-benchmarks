@@ -38,9 +38,10 @@ def _safe_slug(value: str) -> str:
 
 
 class BenchmarkRunner:
-    def __init__(self, datasets: DatasetCatalog, work_dir: Path) -> None:
+    def __init__(self, datasets: DatasetCatalog, work_dir: Path, settings: Settings) -> None:
         self._datasets = datasets
         self._work_dir = work_dir
+        self._settings = settings
 
     def run_job(
         self,
@@ -52,7 +53,7 @@ class BenchmarkRunner:
     ) -> RunResult:
         dataset_spec = self._datasets.get(request.dataset_id)
         dataset_items = self._datasets.collect_items(request.dataset_id, request.limit_files)
-        cpu_threads = self._resolve_cpu_threads(request)
+        cpu_threads = self._resolve_cpu_threads(request, self._settings)
         n_runs = request.n_runs
         warmup_count = min(request.warmup_files, len(dataset_items))
         warmup_items = dataset_items[:warmup_count]
@@ -253,8 +254,15 @@ class BenchmarkRunner:
         return round(percent, 2), eta, current_step
 
     @staticmethod
-    def _resolve_cpu_threads(request: BenchmarkJobCreateRequest) -> int:
-        return int(request.cpu_threads or (os.cpu_count() or 1))
+    def _resolve_cpu_threads(
+        request: BenchmarkJobCreateRequest,
+        settings: Settings | None = None,
+    ) -> int:
+        if request.cpu_threads is not None:
+            return int(request.cpu_threads)
+        if settings is not None and settings.default_cpu_threads is not None:
+            return int(settings.default_cpu_threads)
+        return int(os.cpu_count() or 1)
 
     @staticmethod
     def _safe_relative(path: Path, root: Path) -> str:
@@ -401,14 +409,14 @@ class BenchmarkRunner:
                 versions[name] = None
         return versions
 
-    @staticmethod
     def build_failed_report_payload(
+        self,
         *,
         job_key: str,
         request: BenchmarkJobCreateRequest,
         error: str,
     ) -> dict:
-        cpu_threads = BenchmarkRunner._resolve_cpu_threads(request)
+        cpu_threads = self._resolve_cpu_threads(request, self._settings)
         return {
             "job_key": job_key,
             "status": "failed",
@@ -435,7 +443,7 @@ class BenchmarkRunner:
 
 def build_executors(request: BenchmarkJobCreateRequest, settings: Settings) -> list[SystemExecutor]:
     executors: list[SystemExecutor] = []
-    cpu_threads = int(request.cpu_threads or (os.cpu_count() or 1))
+    cpu_threads = BenchmarkRunner._resolve_cpu_threads(request, settings)
     for system in request.systems:
         spec = SystemSpec(
             system_id=system.system_id,

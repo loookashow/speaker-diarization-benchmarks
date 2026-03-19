@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
     store = FoxnoseStore(settings)
     store.ensure_ready()
 
-    runner = BenchmarkRunner(datasets=datasets, work_dir=settings.work_dir)
+    runner = BenchmarkRunner(datasets=datasets, work_dir=settings.work_dir, settings=settings)
     worker = BenchmarkWorker(settings=settings, store=store, runner=runner)
     worker.start()
 

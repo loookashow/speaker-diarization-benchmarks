@@ -59,7 +59,7 @@ jobs:
           APP_NAME: ${{ inputs.app_name }}
         run: |
           set -euo pipefail
-          machines_json="$(flyctl machine list -a "$APP_NAME" --json)"
+          machines_json="$(flyctl machine list -a "$APP_NAME" -j)"
           machine_id="$(echo "$machines_json" | jq -r '[.[] | select(.state=="started")][0].id // .[0].id // empty')"
           if [ -z "$machine_id" ]; then
             echo "No machines found for app '$APP_NAME'. Deploy app first."
@@ -74,12 +74,21 @@ jobs:
           MACHINE_ID: ${{ steps.machine.outputs.machine_id }}
         run: |
           set -euo pipefail
-          state="$(flyctl machine status "$MACHINE_ID" -a "$APP_NAME" --json | jq -r '.state // empty')"
+          machine_state() {
+            flyctl machine list -a "$APP_NAME" -j \
+              | jq -r --arg id "$MACHINE_ID" 'map(select(.id == $id)) | .[0].state // empty'
+          }
+
+          state="$(machine_state)"
+          if [ -z "$state" ]; then
+            echo "Machine '$MACHINE_ID' was not found in app '$APP_NAME'."
+            exit 1
+          fi
           if [ "$state" != "started" ]; then
             flyctl machine start "$MACHINE_ID" -a "$APP_NAME"
           fi
           for _ in $(seq 1 30); do
-            state="$(flyctl machine status "$MACHINE_ID" -a "$APP_NAME" --json | jq -r '.state // empty')"
+            state="$(machine_state)"
             if [ "$state" = "started" ]; then
               break
             fi
